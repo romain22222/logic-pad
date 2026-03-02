@@ -4,6 +4,8 @@ import DisjointSet from './disjointSet.js';
 import InsightStore from './insightStore.js';
 import type InsightContext from '../insightContext.js';
 import { cell, region } from '../helper.js';
+import { Graph } from './graph.js';
+import { array } from '../../../dataHelper.js';
 
 export type RegionMap = (boolean | null)[][];
 
@@ -15,6 +17,7 @@ export default class RegionStore extends InsightStore {
   private connectedByLemma = new Map<string, Proof>();
   private disconnectedByLemma = new Map<string, Proof>();
   private cachedRegionMap = new Map<number, RegionMap>();
+  private cachedGraphs = new Map<number, Graph>();
 
   public readonly id = 'regionStore';
 
@@ -143,8 +146,8 @@ export default class RegionStore extends InsightStore {
   }
 
   /**
-   * Get a map of cells that are in the same region as the given cell (true), in a different region (false), or unknown
-   * but possible (null). Includes deductions from lemmas.
+   * Get a map of cells that are in the same region as the given cell (`true`), in a different region (`false`), or unknown
+   * but possible (`null`). Includes deductions from lemmas.
    */
   public getRegionMap(region: Position, proof?: Proof): RegionMap {
     const value = this.toCellValue(region.x, region.y);
@@ -193,7 +196,7 @@ export default class RegionStore extends InsightStore {
     }
     for (const [key, existing] of this.connectedByLemma.entries()) {
       const [rawA, rawB] = this.fromPairKey(key);
-      if (rawA !== value && rawB === value) continue;
+      if (rawA !== value && rawB !== value) continue;
       const otherPos = this.fromCellValue(rawA === value ? rawB : rawA);
       const otherTile = grid.getTile(otherPos.x, otherPos.y);
       if (!otherTile.exists) {
@@ -214,7 +217,7 @@ export default class RegionStore extends InsightStore {
     }
     for (const [key, existing] of this.disconnectedByLemma.entries()) {
       const [rawA, rawB] = this.fromPairKey(key);
-      if (rawA !== value && rawB === value) continue;
+      if (rawA !== value && rawB !== value) continue;
       const otherPos = this.fromCellValue(rawA === value ? rawB : rawA);
       const otherTile = grid.getTile(otherPos.x, otherPos.y);
       if (!otherTile.exists) {
@@ -245,11 +248,51 @@ export default class RegionStore extends InsightStore {
     return map;
   }
 
+  public getGraph(region: Position, proof?: Proof): Graph {
+    const value = this.toCellValue(region.x, region.y);
+    const cached = this.cachedGraphs.get(value);
+    if (cached) return cached;
+
+    const regionMap = this.getRegionMap(region, proof);
+    const grid = this.context.grid;
+    const graph = new Graph(grid);
+    const visited = array(grid.width, grid.height, () => false);
+    for (let y = 0; y < regionMap.length; y++) {
+      for (let x = 0; x < regionMap[y].length; x++) {
+        if (regionMap[y][x] === false) continue;
+        if (visited[y][x]) continue;
+        const id = graph.createNode();
+        const connected = grid.connections.getConnectedTiles({ x, y });
+        for (const tile of connected) {
+          if (regionMap[tile.y][tile.x] === false) continue;
+          visited[tile.y][tile.x] = true;
+          graph.addToNode(id, tile.x, tile.y);
+        }
+      }
+    }
+
+    for (let y = 0; y < regionMap.length; y++) {
+      for (let x = 0; x < regionMap[y].length; x++) {
+        if (regionMap[y][x] === false) continue;
+        if (x < regionMap[y].length - 1 && regionMap[y][x + 1] !== false) {
+          graph.connect(x, y, x + 1, y);
+        }
+        if (y < regionMap.length - 1 && regionMap[y + 1][x] !== false) {
+          graph.connect(x, y, x, y + 1);
+        }
+      }
+    }
+
+    this.cachedGraphs.set(value, graph);
+    return graph;
+  }
+
   private recompute(): void {
     const grid = this.context.grid;
     const size = grid.width * grid.height;
     this.disjointSet = new DisjointSet(size);
     this.cachedRegionMap.clear();
+    this.cachedGraphs.clear();
 
     for (let row = 0; row < grid.height; row++) {
       for (let col = 0; col < grid.width; col++) {
