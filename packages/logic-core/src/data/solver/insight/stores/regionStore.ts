@@ -185,29 +185,32 @@ export default class RegionStore extends InsightStore {
    * Get a map of cells that are in the same region as the given cell (`true`), in a different region (`false`), or unknown
    * but possible (`null`). Includes deductions from lemmas.
    */
-  public getRegionMap(region: Position, proof?: Proof): RegionMap {
-    const value = this.toCellValue(region.x, region.y);
+  public getRegionMap(position: Position, proof?: Proof): RegionMap {
+    const value = this.cellDisjointSet.find(
+      this.toCellValue(position.x, position.y)
+    );
     const cached = this.cachedRegionMap.get(value);
     if (cached) return cached;
 
+    position = this.fromCellValue(value);
     const grid = this.context.grid;
     const map: RegionMap = Array.from({ length: grid.height }, () =>
       Array.from({ length: grid.width }, () => false)
     );
-    const tile = grid.getTile(region.x, region.y);
+    const tile = grid.getTile(position.x, position.y);
     if (!tile.exists) {
-      throw this.error(`Cell ${cell(region)} does not exist.`);
+      throw this.error(`Cell ${cell(position)} does not exist.`);
     }
     if (tile.color !== Color.Gray) {
       grid.iterateArea(
-        region,
+        position,
         t => t.color === tile.color || t.color === Color.Gray,
         (_, x, y) => {
           map[y][x] = null;
         }
       );
       grid.iterateArea(
-        region,
+        position,
         t => t.color === tile.color,
         (_, x, y) => {
           map[y][x] = true;
@@ -215,25 +218,37 @@ export default class RegionStore extends InsightStore {
       );
     } else {
       grid.iterateArea(
-        region,
+        position,
         t => t.color === Color.Dark || t.color === Color.Gray,
         (_, x, y) => {
           map[y][x] = null;
         }
       );
       grid.iterateArea(
-        region,
+        position,
         t => t.color === Color.Light || t.color === Color.Gray,
         (_, x, y) => {
           map[y][x] = null;
         }
       );
-      map[region.y][region.x] = true;
+      map[position.y][position.x] = true;
     }
+    const regionRep = this.regionDisjointSet.find(value);
+    const connectedRegions = new Set<number>();
     for (const [key, existing] of this.connectionProofs.entries()) {
       const [rawA, rawB] = this.fromPairKey(key);
-      if (rawA !== value && rawB !== value) continue;
-      const otherPos = this.fromCellValue(rawA === value ? rawB : rawA);
+      if (
+        this.regionDisjointSet.find(rawA) === regionRep ||
+        this.regionDisjointSet.find(rawB) === regionRep
+      ) {
+        connectedRegions.add(rawA);
+        connectedRegions.add(rawB);
+        proof?.add(existing);
+      }
+    }
+    connectedRegions.delete(value);
+    for (const region of connectedRegions) {
+      const otherPos = this.fromCellValue(region);
       const otherTile = grid.getTile(otherPos.x, otherPos.y);
       if (!otherTile.exists) {
         throw this.error(`Cell ${cell(otherPos)} does not exist.`);
@@ -249,7 +264,6 @@ export default class RegionStore extends InsightStore {
       } else {
         map[otherPos.y][otherPos.x] = true;
       }
-      proof?.add(existing);
     }
     for (const [key, existing] of this.disconnectionProofs.entries()) {
       const [rawA, rawB] = this.fromPairKey(key);
@@ -330,35 +344,35 @@ export default class RegionStore extends InsightStore {
     this.cachedRegionMap.clear();
     this.cachedGraphs.clear();
 
-    for (let row = 0; row < grid.height; row++) {
-      for (let col = 0; col < grid.width; col++) {
-        const tile = grid.getTile(col, row);
+    for (let y = 0; y < grid.height; y++) {
+      for (let x = 0; x < grid.width; x++) {
+        const tile = grid.getTile(x, y);
         if (!tile.exists || tile.color === Color.Gray) continue;
 
-        if (col + 1 < grid.width) {
-          const right = grid.getTile(col + 1, row);
+        if (x + 1 < grid.width) {
+          const right = grid.getTile(x + 1, y);
           if (
             right.exists &&
             right.color !== Color.Gray &&
             right.color === tile.color
           ) {
             this.cellDisjointSet.union(
-              this.toCellValue(row, col),
-              this.toCellValue(row, col + 1)
+              this.toCellValue(x, y),
+              this.toCellValue(x + 1, y)
             );
           }
         }
 
-        if (row + 1 < grid.height) {
-          const down = grid.getTile(col, row + 1);
+        if (y + 1 < grid.height) {
+          const down = grid.getTile(x, y + 1);
           if (
             down.exists &&
             down.color !== Color.Gray &&
             down.color === tile.color
           ) {
             this.cellDisjointSet.union(
-              this.toCellValue(row, col),
-              this.toCellValue(row + 1, col)
+              this.toCellValue(x, y),
+              this.toCellValue(x, y + 1)
             );
           }
         }
