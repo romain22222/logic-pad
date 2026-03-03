@@ -3,13 +3,27 @@ import { Position } from '../../../primitives.js';
 import InsightError from '../types/insightError.js';
 
 export class Graph {
+  /**
+   * Each node gets an auto-incremented id. This map stores the grid positions corresponding to each node id.
+   * There can be multiple positions associated with one node because of merged tiles.
+   */
   public idToPositions = new Map<number, number[]>();
+  /**
+   * Each node gets an auto-incremented id. This map stores the node id corresponding to each grid position.
+   */
   public positionToId = new Map<number, number>();
+  /**
+   * Adjacency list representing the graph structure. Each node id maps to a set of adjacent node ids.
+   */
   public adjacency = new Map<number, Set<number>>();
 
   private _articulationPoints?: Set<number>;
   private _shortestPaths = new Map<string, number[]>();
 
+  /**
+   * Articulation points are nodes that, if removed, would increase the number of connected components in the graph.
+   * In the context of the puzzle, these represent chokepoints between different regions where connections must pass through.
+   */
   public get articulationPoints(): Set<number> {
     this._articulationPoints ??= this.tarjanAlgorithm();
     return this._articulationPoints;
@@ -61,6 +75,10 @@ export class Graph {
     this._articulationPoints = undefined;
   }
 
+  /**
+   * Find the shortest path between two nodes using the A* algorithm. The heuristic used is the Manhattan distance
+   * between the positions of the nodes.
+   */
   public shortestPath(id1: number, id2: number): number[] {
     const key = id1 < id2 ? `${id1},${id2}` : `${id2},${id1}`;
     if (this._shortestPaths.has(key)) {
@@ -214,8 +232,8 @@ export class Graph {
   }
 
   private heuristic(id1: number, id2: number): number {
-    const pos1 = this.toPosition(id1);
-    const pos2 = this.toPosition(id2);
+    const pos1 = this.toPosition(this.idToPositions.get(id1)![0]);
+    const pos2 = this.toPosition(this.idToPositions.get(id2)![0]);
     return Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
   }
 }

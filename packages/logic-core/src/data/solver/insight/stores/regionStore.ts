@@ -298,12 +298,18 @@ export default class RegionStore extends InsightStore {
     return map;
   }
 
-  public getGraph(region: Position, proof?: Proof): Graph {
-    const value = this.toCellValue(region.x, region.y);
+  /**
+   * Get a graph representation of the region map for related computations.
+   */
+  public getGraph(position: Position, proof?: Proof): Graph {
+    const value = this.cellDisjointSet.find(
+      this.toCellValue(position.x, position.y)
+    );
     const cached = this.cachedGraphs.get(value);
     if (cached) return cached;
 
-    const regionMap = this.getRegionMap(region, proof);
+    position = this.fromCellValue(value);
+    const regionMap = this.getRegionMap(position, proof);
     const grid = this.context.grid;
     const graph = new Graph(grid);
     const visited = array(grid.width, grid.height, () => false);

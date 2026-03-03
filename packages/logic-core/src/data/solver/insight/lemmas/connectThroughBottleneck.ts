@@ -20,6 +20,8 @@ export default class ConnectThroughBottleneck extends InsightLemma {
     while (true) {
       const seed = grid.find((_, x, y) => !visited[y][x]);
       if (!seed) break;
+
+      // Find a region with disconnected areas
       const proof = this.proof().difficulty(3);
       const regionMap = regionStore.getRegionMap(seed, proof);
       const islands: Position[][] = [];
@@ -45,6 +47,10 @@ export default class ConnectThroughBottleneck extends InsightLemma {
       }
       if (islands.length === 1) continue;
       if (color === undefined) continue;
+
+      // Compute shortest paths between the islands and compare them to the articulation points in the graph.
+      // Haven't proven this rigorously, but I think chokepoints between two islands correspond to the intersection
+      // of the shortest paths between the islands and the articulation points in the graph.
       const graph = regionStore.getGraph(seed, proof);
       const island1 = islands[0][0];
       const chokepoints: Position[] = [];
@@ -61,6 +67,8 @@ export default class ConnectThroughBottleneck extends InsightLemma {
         }
       }
       if (chokepoints.length === 0) continue;
+
+      // color all chokepoints and add a proof
       let modified = false;
       const newTiles = grid.tiles.map(row => row.slice());
       for (const { x, y } of chokepoints) {
