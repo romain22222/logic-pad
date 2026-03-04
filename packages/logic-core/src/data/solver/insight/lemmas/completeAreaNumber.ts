@@ -28,7 +28,7 @@ export default class CompleteAreaNumber extends InsightLemma {
       if (!originTile.exists || originTile.color === Color.Gray) continue;
       const tag = numberStore.getTag(areaNumberInstance.id, idx);
       const proof = this.proof().difficulty(1);
-      const regionMap = regionStore.getRegionMap(position, proof);
+      const regionMap = regionStore.getRegionMap(position, proof).cells;
       const flatMap = regionMap.flat();
       const maxComplete = flatMap.reduce(
         (count, cell) => count + (cell || cell === null ? 1 : 0),

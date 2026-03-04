@@ -31,7 +31,7 @@ export default class OffByXAreaNumberConstrainedByRegionSize extends InsightLemm
         y: Math.floor(symbol.y),
       };
       const proof = this.proof().difficulty(1);
-      const regionMap = regionStore.getRegionMap(position, proof).flat();
+      const regionMap = regionStore.getRegionMap(position, proof).cells.flat();
       const maximum = regionMap.reduce(
         (count, cell) => count + (cell || cell === null ? 1 : 0),
         0

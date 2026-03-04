@@ -7,17 +7,39 @@ import { cell, region } from '../helper.js';
 import { Graph } from './graph.js';
 import { array } from '../../../dataHelper.js';
 
-export type RegionMap = (boolean | null)[][];
+export interface RegionMap {
+  cells: (boolean | null)[][];
+  islands: Position[];
+}
 
 /**
  * Tracks region connectivity and logical region relations.
  */
 export default class RegionStore extends InsightStore {
+  /**
+   * Tracks which cells are in the same initial region based on grid colors.
+   */
   private cellDisjointSet = new DisjointSet(0);
+  /**
+   * Tracks which regions are connected based on logical deductions. Each region is represented by the representative
+   * of its cells in `cellDisjointSet`.
+   */
   private regionDisjointSet = new DisjointSet(0);
+  /**
+   * Connections between regions represented by their representatives in `cellDisjointSet`.
+   * This must not include entries connecting two cells in the same region, aka redundant connections.
+   */
   private connectionProofs = new Map<string, Proof>();
+  /**
+   * Cache to quickly access all proofs that connect a given region to other regions,
+   * keyed by the representative of the region in `regionDisjointSet`.
+   */
   private regionConnectionProofs = new Map<number, Set<Proof>>();
+  /**
+   * Deductions that two regions are disconnected, keyed by the representatives of the regions in `cellDisjointSet`.
+   */
   private disconnectionProofs = new Map<string, Proof>();
+
   private cachedRegionMap = new Map<number, RegionMap>();
   private cachedGraphs = new Map<number, Graph>();
 
@@ -194,9 +216,12 @@ export default class RegionStore extends InsightStore {
 
     position = this.fromCellValue(value);
     const grid = this.context.grid;
-    const map: RegionMap = Array.from({ length: grid.height }, () =>
-      Array.from({ length: grid.width }, () => false)
-    );
+    const map: RegionMap = {
+      cells: Array.from({ length: grid.height }, () =>
+        Array.from({ length: grid.width }, () => false)
+      ),
+      islands: [position],
+    };
     const tile = grid.getTile(position.x, position.y);
     if (!tile.exists) {
       throw this.error(`Cell ${cell(position)} does not exist.`);
@@ -206,14 +231,14 @@ export default class RegionStore extends InsightStore {
         position,
         t => t.color === tile.color || t.color === Color.Gray,
         (_, x, y) => {
-          map[y][x] = null;
+          map.cells[y][x] = null;
         }
       );
       grid.iterateArea(
         position,
         t => t.color === tile.color,
         (_, x, y) => {
-          map[y][x] = true;
+          map.cells[y][x] = true;
         }
       );
     } else {
@@ -221,17 +246,17 @@ export default class RegionStore extends InsightStore {
         position,
         t => t.color === Color.Dark || t.color === Color.Gray,
         (_, x, y) => {
-          map[y][x] = null;
+          map.cells[y][x] = null;
         }
       );
       grid.iterateArea(
         position,
         t => t.color === Color.Light || t.color === Color.Gray,
         (_, x, y) => {
-          map[y][x] = null;
+          map.cells[y][x] = null;
         }
       );
-      map[position.y][position.x] = true;
+      map.cells[position.y][position.x] = true;
     }
     const regionRep = this.regionDisjointSet.find(value);
     const connectedRegions = new Set<number>();
@@ -258,12 +283,13 @@ export default class RegionStore extends InsightStore {
           otherPos,
           t => t.color === otherTile.color,
           (_, x, y) => {
-            map[y][x] = true;
+            map.cells[y][x] = true;
           }
         );
       } else {
-        map[otherPos.y][otherPos.x] = true;
+        map.cells[otherPos.y][otherPos.x] = true;
       }
+      map.islands.push(otherPos);
     }
     for (const [key, existing] of this.disconnectionProofs.entries()) {
       const [rawA, rawB] = this.fromPairKey(key);
@@ -279,18 +305,18 @@ export default class RegionStore extends InsightStore {
           (t, x, y) => {
             if (otherTile.color === tile.color) {
               const { x: arrayX, y: arrayY } = grid.toArrayCoordinates(x, y);
-              map[arrayY][arrayX] = false;
+              map.cells[arrayY][arrayX] = false;
             }
             return t.color === otherTile.color;
           },
           (_, x, y) => {
             if (otherTile.color !== tile.color) {
-              map[y][x] = false;
+              map.cells[y][x] = false;
             }
           }
         );
       } else {
-        map[otherPos.y][otherPos.x] = false;
+        map.cells[otherPos.y][otherPos.x] = false;
       }
       proof?.add(existing);
     }
@@ -309,7 +335,7 @@ export default class RegionStore extends InsightStore {
     if (cached) return cached;
 
     position = this.fromCellValue(value);
-    const regionMap = this.getRegionMap(position, proof);
+    const regionMap = this.getRegionMap(position, proof).cells;
     const grid = this.context.grid;
     const graph = new Graph(grid);
     const visited = array(grid.width, grid.height, () => false);

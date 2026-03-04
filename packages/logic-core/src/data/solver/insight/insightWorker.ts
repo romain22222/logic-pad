@@ -29,12 +29,15 @@ onmessage = e => {
       for (const lemma of lemmas) {
         const changed = lemma.apply(context);
         if (changed) {
+          console.log(`%c${lemma.id}:\n  successful`, 'color: darkgray');
           context.tileHistory.forEach(history =>
             console.log(history.proof.toString())
           );
           context.tileHistory.length = 0;
           restart = true;
           break;
+        } else {
+          console.log(`%c${lemma.id}:\n  no changes`, 'color: darkgray');
         }
       }
     }

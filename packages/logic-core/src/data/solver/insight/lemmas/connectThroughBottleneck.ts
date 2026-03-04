@@ -18,44 +18,30 @@ export default class ConnectThroughBottleneck extends InsightLemma {
     let progress = false;
     const visited = array(grid.width, grid.height, () => false);
     while (true) {
-      const seed = grid.find((_, x, y) => !visited[y][x]);
+      const seed = grid.find(
+        (t, x, y) => !visited[y][x] && t.exists && t.color !== Color.Gray
+      );
       if (!seed) break;
 
       // Find a region with disconnected areas
       const proof = this.proof().difficulty(3);
       const regionMap = regionStore.getRegionMap(seed, proof);
-      const islands: Position[][] = [];
-      let color: Color | undefined;
-      while (true) {
-        const islandSeed = grid.find(
-          (_, x, y) => regionMap[y][x] === true && !visited[y][x]
-        );
-        if (!islandSeed) break;
-        const island: Position[] = [];
-        grid.iterateArea(
-          islandSeed,
-          (_, x, y) => regionMap[y][x] === true,
-          (t, x, y) => {
-            island.push({ x, y });
-            if (color === undefined) {
-              color = t.color;
-            }
-          },
-          visited
-        );
-        islands.push(island);
-      }
-      if (islands.length === 1) continue;
-      if (color === undefined) continue;
+      const color = grid.getTile(seed.x, seed.y).color;
+      regionMap.cells.forEach((row, y) =>
+        row.forEach((cell, x) => {
+          if (cell !== false) visited[y][x] = true;
+        })
+      );
+      if (regionMap.islands.length <= 1) continue;
 
       // Compute shortest paths between the islands and compare them to the articulation points in the graph.
       // Haven't proven this rigorously, but I think chokepoints between two islands correspond to the intersection
       // of the shortest paths between the islands and the articulation points in the graph.
       const graph = regionStore.getGraph(seed, proof);
-      const island1 = islands[0][0];
+      const island1 = regionMap.islands[0];
       const chokepoints: Position[] = [];
-      for (let i = 1; i < islands.length; i++) {
-        const island2 = islands[i][0];
+      for (let i = 1; i < regionMap.islands.length; i++) {
+        const island2 = regionMap.islands[i];
         const path = graph.shortestPath(
           graph.getId(island1.x, island1.y),
           graph.getId(island2.x, island2.y)
@@ -79,7 +65,7 @@ export default class ConnectThroughBottleneck extends InsightLemma {
       context.setTiles(
         newTiles,
         proof.describe(
-          `Cells at ${chokepoints.map(p => cell(p)).join(', ')} are bottlenecks connecting ${islands.map(island => region(island[0])).join(', ')}, so they must be filled in`
+          `Cells at ${chokepoints.map(p => cell(p)).join(', ')} are bottlenecks connecting ${regionMap.islands.map(island => region(island)).join(', ')}, so they must be filled in`
         )
       );
       progress ||= modified;
