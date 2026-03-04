@@ -62,6 +62,7 @@ export default class ConnectThroughBottleneck extends InsightLemma {
         newTiles[y][x] = newTiles[y][x].copyWith({ color });
         modified = true;
       }
+      if (!modified) continue;
       context.setTiles(
         newTiles,
         proof.describe(

@@ -6,7 +6,7 @@ export interface ProofNode {
 }
 
 export default class Proof {
-  private readonly root: ProofNode;
+  public readonly root: ProofNode;
 
   protected constructor(root: ProofNode) {
     this.root = root;

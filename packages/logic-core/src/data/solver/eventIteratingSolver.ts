@@ -58,8 +58,8 @@ export default abstract class EventIteratingSolver extends Solver {
           );
 
           worker.addEventListener('error', (e: ErrorEvent) => {
-            alert(`Error while solving!\n${e.message}`);
-            fail(e as unknown as Error);
+            console.log(e);
+            fail(new Error(e.message));
           });
         }
       );

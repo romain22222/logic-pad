@@ -15,7 +15,7 @@ import PuzzleLoveButton from '../components/quickActions/PuzzleLoveButton';
 import PuzzleSolveControl from '../components/PuzzleSolveControl';
 import PuzzleEditButton from '../components/quickActions/PuzzleEditButton';
 import Loading from '../components/Loading';
-import InsightSolver from '../components/InsightSolver';
+import GridInsight from '../components/GridInsight';
 
 const SharePuzzleImage = lazy(
   () => import('../components/quickActions/SharePuzzleImage')
@@ -49,7 +49,7 @@ export default memo(function SolveScreen({
               )}
             </GridConsumer>
           </div>
-          <InsightSolver />
+          <GridInsight />
           <GridConsumer>
             {({ grid }) => (
               <InstructionPartOutlet
