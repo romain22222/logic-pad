@@ -42,13 +42,14 @@ export default class OffByXAreaNumberConstrainedByRegionSize extends InsightLemm
       );
       for (const possibility of possibilities) {
         if (possibility > maximum || possibility < minimum) {
-          progress ||= numberStore.eliminatePossibility(
+          const changed = numberStore.eliminatePossibility(
             tag,
             possibility,
             proof.describe(
               `Area number at ${cell(position)} cannot be ${possibility} because the region size is between ${minimum} and ${maximum}`
             )
           );
+          progress ||= changed;
         }
       }
     }

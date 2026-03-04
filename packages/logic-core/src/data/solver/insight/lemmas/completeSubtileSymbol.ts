@@ -27,10 +27,11 @@ export default class CompleteSubtileSymbol extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const grid = context.grid;
     let progress = false;
     for (const symbolType of SUBTILE_SYMBOLS) {
-      for (const [_, symbol] of grid.symbols.get(symbolType)?.entries() ?? []) {
+      for (const [_, symbol] of context.grid.symbols
+        .get(symbolType)
+        ?.entries() ?? []) {
         if (symbol.x % 1 === 0 && symbol.y % 1 === 0) continue;
         const minX = Math.floor(symbol.x);
         const minY = Math.floor(symbol.y);
@@ -44,7 +45,7 @@ export default class CompleteSubtileSymbol extends InsightLemma {
         ];
         const colors = subtilePositions
           .map(pos => {
-            const tile = grid.getTile(pos.x, pos.y);
+            const tile = context.grid.getTile(pos.x, pos.y);
             return tile.exists ? tile.color : null;
           })
           .filter((color): color is Color => color !== null);
@@ -57,19 +58,22 @@ export default class CompleteSubtileSymbol extends InsightLemma {
         }
         const color = colors.find(color => color !== Color.Gray)!;
         let changed = false;
-        const newTiles = modifyTiles(grid, (x, y, { get, setColor }) => {
-          const tile = get(x, y);
-          if (
-            tile.exists &&
-            !tile.fixed &&
-            tile.color === Color.Gray &&
-            subtilePositions.some(pos => pos.x === x && pos.y === y)
-          ) {
-            setColor(x, y, color);
-            changed = true;
+        const newTiles = modifyTiles(
+          context.grid,
+          (x, y, { get, setColor }) => {
+            const tile = get(x, y);
+            if (
+              tile.exists &&
+              !tile.fixed &&
+              tile.color === Color.Gray &&
+              subtilePositions.some(pos => pos.x === x && pos.y === y)
+            ) {
+              setColor(x, y, color);
+              changed = true;
+            }
+            return tile;
           }
-          return tile;
-        });
+        );
         if (changed) {
           context.setTiles(
             newTiles,

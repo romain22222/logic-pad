@@ -15,17 +15,16 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const grid = context.grid;
     const numberStore = context.numberSymbolStore;
     let progress = false;
-    for (const [idx, symbol] of grid.symbols
+    for (const [idx, symbol] of context.grid.symbols
       .get(areaNumberInstance.id)
       ?.entries() ?? []) {
       const position = {
         x: Math.floor(symbol.x),
         y: Math.floor(symbol.y),
       };
-      const originTile = grid.getTile(position.x, position.y);
+      const originTile = context.grid.getTile(position.x, position.y);
       if (!originTile.exists || originTile.color !== Color.Gray) continue;
       const tag = numberStore.getTag(areaNumberInstance.id, idx);
       for (const color of COLORS) {
@@ -62,19 +61,22 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
         );
         const minPossible = numberStore.minPossible(tag, proof);
         const fillOpposite = () => {
-          return modifyTiles(grid, (x, y, { get, setOppositeColor }) => {
-            const tile = get(x, y);
-            if (
-              tile.exists &&
-              !tile.fixed &&
-              tile.color === Color.Gray &&
-              (x === Math.floor(symbol.x) || x === Math.ceil(symbol.x)) &&
-              (y === Math.floor(symbol.y) || y === Math.ceil(symbol.y))
-            ) {
-              setOppositeColor(x, y, color);
+          return modifyTiles(
+            context.grid,
+            (x, y, { get, setOppositeColor }) => {
+              const tile = get(x, y);
+              if (
+                tile.exists &&
+                !tile.fixed &&
+                tile.color === Color.Gray &&
+                (x === Math.floor(symbol.x) || x === Math.ceil(symbol.x)) &&
+                (y === Math.floor(symbol.y) || y === Math.ceil(symbol.y))
+              ) {
+                setOppositeColor(x, y, color);
+              }
+              return tile;
             }
-            return tile;
-          });
+          );
         };
         if (minPossible > maxComplete) {
           context.setTiles(

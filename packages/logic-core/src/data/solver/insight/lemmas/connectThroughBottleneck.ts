@@ -55,21 +55,22 @@ export default class ConnectThroughBottleneck extends InsightLemma {
       if (chokepoints.length === 0) continue;
 
       // color all chokepoints and add a proof
-      let modified = false;
+      const modified: Position[] = [];
       const newTiles = grid.tiles.map(row => row.slice());
-      for (const { x, y } of chokepoints) {
+      for (const chokePoint of chokepoints) {
+        const { x, y } = chokePoint;
         if (grid.getTile(x, y).color === color) continue;
         newTiles[y][x] = newTiles[y][x].copyWith({ color });
-        modified = true;
+        modified.push(chokePoint);
       }
-      if (!modified) continue;
+      if (modified.length === 0) continue;
       context.setTiles(
         newTiles,
         proof.describe(
-          `Cells at ${chokepoints.map(p => cell(p)).join(', ')} are bottlenecks connecting ${regionMap.islands.map(island => region(island)).join(', ')}, so they must be filled in`
+          `Cells at ${modified.map(p => cell(p)).join(', ')} are bottlenecks connecting ${regionMap.islands.map(island => region(island)).join(', ')}, so they must be filled in`
         )
       );
-      progress ||= modified;
+      progress = true;
     }
     return progress;
   }

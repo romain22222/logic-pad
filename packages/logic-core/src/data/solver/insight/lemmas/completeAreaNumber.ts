@@ -13,18 +13,17 @@ export default class CompleteAreaNumber extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const grid = context.grid;
     const numberStore = context.numberSymbolStore;
     const regionStore = context.regionStore;
     let progress = false;
-    for (const [idx, symbol] of grid.symbols
+    for (const [idx, symbol] of context.grid.symbols
       .get(areaNumberInstance.id)
       ?.entries() ?? []) {
       const position = {
         x: Math.floor(symbol.x),
         y: Math.floor(symbol.y),
       };
-      const originTile = grid.getTile(position.x, position.y);
+      const originTile = context.grid.getTile(position.x, position.y);
       if (!originTile.exists || originTile.color === Color.Gray) continue;
       const tag = numberStore.getTag(areaNumberInstance.id, idx);
       const proof = this.proof().difficulty(1);
@@ -45,13 +44,16 @@ export default class CompleteAreaNumber extends InsightLemma {
         );
       }
       if (minPossible === maxComplete && maxComplete > minComplete) {
-        const newTiles = modifyTiles(grid, (x, y, { get, setColor }) => {
-          const tile = get(x, y);
-          if (regionMap[y][x] !== false && tile.exists && !tile.fixed) {
-            setColor(x, y, originTile.color);
+        const newTiles = modifyTiles(
+          context.grid,
+          (x, y, { get, setColor }) => {
+            const tile = get(x, y);
+            if (regionMap[y][x] !== false && tile.exists && !tile.fixed) {
+              setColor(x, y, originTile.color);
+            }
+            return tile;
           }
-          return tile;
-        });
+        );
         context.setTiles(
           newTiles,
           proof.describe(
@@ -69,7 +71,7 @@ export default class CompleteAreaNumber extends InsightLemma {
       }
       if (maxPossible === minComplete && maxComplete > minComplete) {
         const newTiles = modifyTiles(
-          grid,
+          context.grid,
           (x, y, { get, setOppositeColor }) => {
             const tile = get(x, y);
             if (
@@ -80,9 +82,11 @@ export default class CompleteAreaNumber extends InsightLemma {
             ) {
               let isNeighboring = false;
               isNeighboring ||= y > 0 && !!regionMap[y - 1][x];
-              isNeighboring ||= y < grid.height - 1 && !!regionMap[y + 1][x];
+              isNeighboring ||=
+                y < context.grid.height - 1 && !!regionMap[y + 1][x];
               isNeighboring ||= x > 0 && !!regionMap[y][x - 1];
-              isNeighboring ||= x < grid.width - 1 && !!regionMap[y][x + 1];
+              isNeighboring ||=
+                x < context.grid.width - 1 && !!regionMap[y][x + 1];
               if (isNeighboring) {
                 setOppositeColor(x, y, originTile.color);
               }
