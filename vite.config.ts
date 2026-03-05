@@ -177,7 +177,6 @@ export default defineConfig({
         '@terrazzo/tiles',
         '@terrazzo/react-color-picker',
         '@terrazzo/use-color',
-        /\(local\)\.[^/\\]*\.lazy/, // exclude local-only modules
       ],
     },
   },
