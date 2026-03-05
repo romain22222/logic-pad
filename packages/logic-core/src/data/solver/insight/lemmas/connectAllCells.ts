@@ -16,7 +16,7 @@ export default class ConnectAllCells extends InsightLemma {
 
   public apply(context: InsightContext): boolean {
     const rules = context.grid.rules.filter(
-      rule => rule.id === connectAllInstance.id
+      (rule): rule is ConnectAllRule => rule.id === connectAllInstance.id
     );
     let progress = false;
     const visited = array(
@@ -25,7 +25,7 @@ export default class ConnectAllCells extends InsightLemma {
       (i, j) => !context.grid.getTile(i, j).exists
     );
     for (const rule of rules) {
-      const color = (rule as ConnectAllRule).color;
+      const color = rule.color;
       const islands: Position[][] = [];
       while (true) {
         const seed = context.grid.find(

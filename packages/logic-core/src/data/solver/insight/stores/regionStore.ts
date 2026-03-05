@@ -31,16 +31,25 @@ export default class RegionStore extends InsightStore {
    */
   private connectionProofs = new Map<string, Proof>();
   /**
-   * Cache to quickly access all proofs that connect a given region to other regions,
-   * keyed by the representative of the region in `regionDisjointSet`.
-   */
-  private regionConnectionProofs = new Map<number, Set<Proof>>();
-  /**
    * Deductions that two regions are disconnected, keyed by the representatives of the regions in `cellDisjointSet`.
    */
   private disconnectionProofs = new Map<string, Proof>();
-
+  /**
+   * Cache to quickly check if two regions are known to be disconnected, keyed by the representatives of the regions in `cellDisjointSet`.
+   */
+  private cachedPhysicalDisconnection = new Set<string>();
+  /**
+   * Cache to quickly access all proofs that connect a given region to other regions,
+   * keyed by the representative of the region in `regionDisjointSet`.
+   */
+  private cachedRegionConnectionProofs = new Map<number, Set<Proof>>();
+  /**
+   * Cache to access the region map for a given region representative in `cellDisjointSet`.
+   */
   private cachedRegionMap = new Map<number, RegionMap>();
+  /**
+   * Cache to access the graph representation of a region map for a given region representative in `cellDisjointSet`.
+   */
   private cachedGraphs = new Map<number, Graph>();
 
   public readonly id = 'regionStore';
@@ -64,11 +73,10 @@ export default class RegionStore extends InsightStore {
     copy.cellDisjointSet = this.cellDisjointSet.copy();
     copy.regionDisjointSet = this.regionDisjointSet.copy();
     copy.connectionProofs = new Map(this.connectionProofs);
-    copy.regionConnectionProofs = new Map(
-      Array.from(this.regionConnectionProofs.entries()).map(([key, proofs]) => [
-        key,
-        new Set(proofs),
-      ])
+    copy.cachedRegionConnectionProofs = new Map(
+      Array.from(this.cachedRegionConnectionProofs.entries()).map(
+        ([key, proofs]) => [key, new Set(proofs)]
+      )
     );
     copy.disconnectionProofs = new Map(this.disconnectionProofs);
     copy.cachedRegionMap = new Map(this.cachedRegionMap);
@@ -98,7 +106,7 @@ export default class RegionStore extends InsightStore {
     const regionRepA = this.regionDisjointSet.find(repA);
     const regionRepB = this.regionDisjointSet.find(repB);
     if (regionRepA === regionRepB) {
-      const regionProofs = this.regionConnectionProofs.get(regionRepA);
+      const regionProofs = this.cachedRegionConnectionProofs.get(regionRepA);
       if (regionProofs) {
         for (const regionProof of regionProofs) {
           proof?.add(regionProof);
@@ -133,6 +141,9 @@ export default class RegionStore extends InsightStore {
     if (repA === repB) return false;
 
     const key = this.pairKey(repA, repB);
+    if (this.cachedPhysicalDisconnection.has(key)) {
+      return true;
+    }
     const deduction = this.disconnectionProofs.get(key);
     if (deduction) {
       proof?.add(deduction);
@@ -140,6 +151,29 @@ export default class RegionStore extends InsightStore {
     }
 
     return false;
+  }
+
+  /**
+   * Gets the list of regions that are disconnected from the given cell.
+   */
+  public getDisconnectedRegions(cell: Position, proof?: Proof): Position[] {
+    const value = this.toCellValue(cell.x, cell.y);
+    const rep = this.cellDisjointSet.find(value);
+    const disconnected: Position[] = [];
+    for (const [key, existing] of this.disconnectionProofs.entries()) {
+      const [rawA, rawB] = this.fromPairKey(key);
+      if (rawA !== rep && rawB !== rep) continue;
+      const otherPos = this.fromCellValue(rawA === rep ? rawB : rawA);
+      disconnected.push(otherPos);
+      proof?.add(existing);
+    }
+    for (const key of this.cachedPhysicalDisconnection.values()) {
+      const [rawA, rawB] = this.fromPairKey(key);
+      if (rawA !== rep && rawB !== rep) continue;
+      const otherPos = this.fromCellValue(rawA === rep ? rawB : rawA);
+      disconnected.push(otherPos);
+    }
+    return disconnected;
   }
 
   /**
@@ -155,7 +189,7 @@ export default class RegionStore extends InsightStore {
 
     const key = this.pairKey(repA, repB);
     const disconnected = this.disconnectionProofs.get(key);
-    if (disconnected) {
+    if (disconnected || this.cachedPhysicalDisconnection.has(key)) {
       throw this.error(
         `Cannot connect ${region(cellA)} and ${region(cellB)}: they are already known to be disconnected.`
       );
@@ -171,23 +205,23 @@ export default class RegionStore extends InsightStore {
     if (oldRepA === oldRepB) {
       // The regions were already transitively connected, so we just need to add the proof to the region proofs.
       const regionProofs =
-        this.regionConnectionProofs.get(oldRepA) ?? new Set<Proof>();
+        this.cachedRegionConnectionProofs.get(oldRepA) ?? new Set<Proof>();
       regionProofs.add(proof);
-      this.regionConnectionProofs.set(oldRepA, regionProofs);
+      this.cachedRegionConnectionProofs.set(oldRepA, regionProofs);
       return true;
     }
     this.regionDisjointSet.union(repA, repB);
     const newRep = this.regionDisjointSet.find(repA);
-    this.regionConnectionProofs.set(
+    this.cachedRegionConnectionProofs.set(
       newRep,
       new Set([
         proof,
-        ...(this.regionConnectionProofs.get(oldRepA) || []),
-        ...(this.regionConnectionProofs.get(oldRepB) || []),
+        ...(this.cachedRegionConnectionProofs.get(oldRepA) || []),
+        ...(this.cachedRegionConnectionProofs.get(oldRepB) || []),
       ])
     );
-    this.regionConnectionProofs.delete(oldRepA);
-    this.regionConnectionProofs.delete(oldRepB);
+    this.cachedRegionConnectionProofs.delete(oldRepA);
+    this.cachedRegionConnectionProofs.delete(oldRepB);
     return true;
   }
 
@@ -212,6 +246,9 @@ export default class RegionStore extends InsightStore {
       throw this.error(
         `Cannot disconnect ${region(cellA)} and ${region(cellB)}: they are already known to be connected.`
       );
+    }
+    if (this.cachedPhysicalDisconnection.has(key)) {
+      return false;
     }
     const existing = this.disconnectionProofs.get(key);
     if (existing) {
@@ -433,8 +470,9 @@ export default class RegionStore extends InsightStore {
     this.connectionProofs = this.rekeyMap(this.connectionProofs);
     this.disconnectionProofs = this.rekeyMap(this.disconnectionProofs);
 
+    this.cachedPhysicalDisconnection = this.buildPhysicalDisconnectionCache();
     this.regionDisjointSet = new DisjointSet(size);
-    this.regionConnectionProofs = new Map<number, Set<Proof>>();
+    this.cachedRegionConnectionProofs = new Map<number, Set<Proof>>();
     for (const [key] of this.connectionProofs.entries()) {
       const [repA, repB] = this.fromPairKey(key);
       this.regionDisjointSet.union(repA, repB);
@@ -442,11 +480,67 @@ export default class RegionStore extends InsightStore {
     for (const [key, proof] of this.connectionProofs.entries()) {
       const [rawA] = this.fromPairKey(key);
       const repA = this.regionDisjointSet.find(rawA);
-      this.regionConnectionProofs.set(
+      this.cachedRegionConnectionProofs.set(
         repA,
-        (this.regionConnectionProofs.get(repA) ?? new Set<Proof>()).add(proof)
+        (this.cachedRegionConnectionProofs.get(repA) ?? new Set<Proof>()).add(
+          proof
+        )
       );
     }
+  }
+
+  // todo: this may be too slow
+  // If this cache is not frequently used then we can consider removing it and directly checking for physical disconnection in `isDisconnected`
+  private buildPhysicalDisconnectionCache(): Set<string> {
+    const grid = this.context.grid;
+    const visited = array(grid.width, grid.height, () => false);
+    const cache = new Set<string>();
+    while (true) {
+      const seed = grid.find(
+        (t, x, y) => !visited[y][x] && t.exists && t.color !== Color.Gray
+      );
+      if (!seed) break;
+      const originTile = grid.getTile(seed.x, seed.y);
+      const region = array<boolean | null>(
+        grid.width,
+        grid.height,
+        () => false
+      );
+      grid.iterateArea(
+        seed,
+        t => t.color === originTile.color || t.color === Color.Gray,
+        (_, x, y) => {
+          region[y][x] = null;
+        }
+      );
+      grid.iterateArea(
+        seed,
+        t => t.color === originTile.color,
+        (_, x, y) => {
+          region[y][x] = true;
+          visited[y][x] = true;
+        }
+      );
+      for (let y = 0; y < region.length; y++) {
+        for (let x = 0; x < region[y].length; x++) {
+          if (region[y][x] !== false || visited[y][x]) continue;
+          const otherTile = grid.getTile(x, y);
+          if (
+            !otherTile.exists ||
+            (otherTile.color !== Color.Gray &&
+              otherTile.color !== originTile.color)
+          )
+            continue;
+          const valueA = this.toCellValue(x, y);
+          const valueB = this.toCellValue(seed.x, seed.y);
+          const repA = this.cellDisjointSet.find(valueA);
+          const repB = this.cellDisjointSet.find(valueB);
+          const key = this.pairKey(repA, repB);
+          cache.add(key);
+        }
+      }
+    }
+    return cache;
   }
 
   private rekeyMap(map: Map<string, Proof>): Map<string, Proof> {
