@@ -13,8 +13,8 @@ export default class CompleteAreaNumber extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const numberStore = context.numberSymbols;
-    const regionStore = context.regions;
+    const numberSymbols = context.numberSymbols;
+    const regions = context.regions;
     let progress = false;
     for (const [idx, symbol] of context.grid.symbols
       .get(areaNumberInstance.id)
@@ -25,9 +25,10 @@ export default class CompleteAreaNumber extends InsightLemma {
       };
       const originTile = context.grid.getTile(position.x, position.y);
       if (!originTile.exists || originTile.color === Color.Gray) continue;
-      const tag = numberStore.getTag(areaNumberInstance.id, idx);
+      const tag = numberSymbols.getTag(areaNumberInstance.id, idx);
       const proof = this.proof().difficulty(1);
-      const regionMap = regionStore.getRegionMap(position, proof).cells;
+      const regionMap = regions.get(position)?.getRegionMap(proof);
+      if (!regionMap) continue;
       const flatMap = regionMap.flat();
       const maxComplete = flatMap.reduce(
         (count, cell) => count + (cell || cell === null ? 1 : 0),
@@ -37,7 +38,7 @@ export default class CompleteAreaNumber extends InsightLemma {
         (count, cell) => count + (cell ? 1 : 0),
         0
       );
-      const minPossible = numberStore.minPossible(tag, proof);
+      const minPossible = numberSymbols.minPossible(tag, proof);
       if (minPossible > maxComplete) {
         throw this.error(
           `Area number at ${cell(position)} cannot be completed because the minimum possible value is ${minPossible} but there are at least ${maxComplete} cells in the region`
@@ -63,7 +64,7 @@ export default class CompleteAreaNumber extends InsightLemma {
         progress = true;
         continue;
       }
-      const maxPossible = numberStore.maxPossible(tag, proof);
+      const maxPossible = numberSymbols.maxPossible(tag, proof);
       if (maxPossible < minComplete) {
         throw this.error(
           `Area number at ${cell(position)} cannot be completed because the maximum possible value is ${maxPossible} but there are at least ${minComplete} completed cells in the region`

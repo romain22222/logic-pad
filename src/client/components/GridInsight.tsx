@@ -129,7 +129,6 @@ function Description({
   overlayHandle: RefObject<InsightOverlayHandle | null>;
 }) {
   const parts = description.split(bothRegex);
-  console.log(parts);
   return (
     <>
       {parts.map((part, index) => {

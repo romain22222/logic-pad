@@ -6,7 +6,7 @@ import BanPatternRule, {
 import InsightContext from '../insightContext.js';
 import { ShapeElement } from '../../../shapes.js';
 import { Color } from '../../../primitives.js';
-import { cell, modifyTiles } from '../helper.js';
+import { cell, modifyTiles, setOppositeColor } from '../helper.js';
 
 export default class BreakBannedPattern extends InsightLemma {
   public readonly id = 'break-banned-pattern';
@@ -52,13 +52,13 @@ export default class BreakBannedPattern extends InsightLemma {
               }
             }
             if (mismatch) {
-              const newTiles = modifyTiles(
+              const newTiles = modifyTiles(context.grid);
+              setOppositeColor(
                 context.grid,
-                (x, y, { setOppositeColor }) => {
-                  if (x === mismatch.x + dx && y === mismatch.y + dy) {
-                    setOppositeColor(x, y, mismatch.color);
-                  }
-                }
+                newTiles,
+                mismatch.x + dx,
+                mismatch.y + dy,
+                mismatch.color
               );
               context.setTiles(
                 newTiles,

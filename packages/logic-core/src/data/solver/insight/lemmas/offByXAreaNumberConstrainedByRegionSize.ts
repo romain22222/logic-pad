@@ -16,21 +16,22 @@ export default class OffByXAreaNumberConstrainedByRegionSize extends InsightLemm
   }
 
   public apply(context: InsightContext): boolean {
-    const numberStore = context.numberSymbols;
-    const regionStore = context.regions;
+    const numberSymbols = context.numberSymbols;
+    const regions = context.regions;
     let progress = false;
     for (const [idx, symbol] of context.grid.symbols
       .get(areaNumberInstance.id)
       ?.entries() ?? []) {
-      const tag = numberStore.getTag(areaNumberInstance.id, idx);
-      const possibilities = numberStore.getPossibilities(tag);
+      const tag = numberSymbols.getTag(areaNumberInstance.id, idx);
+      const possibilities = numberSymbols.getPossibilities(tag);
       if (possibilities.length <= 1) continue;
       const position = {
         x: Math.floor(symbol.x),
         y: Math.floor(symbol.y),
       };
       const proof = this.proof().difficulty(1);
-      const regionMap = regionStore.getRegionMap(position, proof).cells.flat();
+      const regionMap = regions.get(position)?.getRegionMap(proof).flat();
+      if (!regionMap) continue;
       const maximum = regionMap.reduce(
         (count, cell) => count + (cell || cell === null ? 1 : 0),
         0
@@ -41,7 +42,7 @@ export default class OffByXAreaNumberConstrainedByRegionSize extends InsightLemm
       );
       for (const possibility of possibilities) {
         if (possibility > maximum || possibility < minimum) {
-          const changed = numberStore.eliminatePossibility(
+          const changed = numberSymbols.eliminatePossibility(
             tag,
             possibility,
             proof.describe(

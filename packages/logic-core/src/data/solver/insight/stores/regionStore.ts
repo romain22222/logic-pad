@@ -3,7 +3,7 @@ import Proof from '../types/proof.js';
 import DisjointSet from './disjointSet.js';
 import InsightStore from './insightStore.js';
 import type InsightContext from '../insightContext.js';
-import { cell, region } from '../helper.js';
+import { cell, area } from '../helper.js';
 import { RegionGraph } from './regionGraph.js';
 import { array } from '../../../dataHelper.js';
 import Symbol from '../../../symbols/symbol.js';
@@ -25,7 +25,8 @@ export class Region {
     public positions: Position[] = [],
     public symbols: Symbol[] = [],
     public connectedAreas = new Set<AreaId>(),
-    public connectionProofs = new Set<Proof>()
+    public connectionProofs = new Set<Proof>(),
+    public disconnectionProofs = new Set<Proof>()
   ) {
     this.context = context;
     this.id = id;
@@ -34,6 +35,7 @@ export class Region {
     this.symbols = symbols;
     this.connectedAreas = connectedAreas;
     this.connectionProofs = connectionProofs;
+    this.disconnectionProofs = disconnectionProofs;
   }
 
   public static merge(
@@ -63,7 +65,8 @@ export class Region {
         ...regionA.connectionProofs,
         ...regionB.connectionProofs,
         ...(proof ? [proof] : []),
-      ])
+      ]),
+      new Set([...regionA.disconnectionProofs, ...regionB.disconnectionProofs])
     );
   }
 
@@ -72,16 +75,20 @@ export class Region {
    * Get a map of cells that are in the same region as the given cell (`true`), in a different region (`false`), or unknown
    * but possible (`null`). Includes deductions from lemmas.
    */
-  public get regionMap(): RegionMap {
+  public getRegionMap(proof?: Proof): RegionMap {
     if (!this._regionMap) {
       this._regionMap = this.buildRegionMap();
+    }
+    if (proof) {
+      this.connectionProofs.forEach(p => proof.add(p));
+      this.disconnectionProofs.forEach(p => proof.add(p));
     }
     return this._regionMap;
   }
 
   private buildRegionMap(): RegionMap {
     const grid = this.context.grid;
-    const map: RegionMap = array(grid.width, grid.height, () => null);
+    const map: RegionMap = array(grid.width, grid.height, () => false);
     if (this.color !== Color.Gray) {
       grid.iterateArea(
         this.positions[0],
@@ -126,9 +133,13 @@ export class Region {
   /**
    * Get a graph representation of the region map for related computations.
    */
-  public get regionGraph(): RegionGraph {
+  public getRegionGraph(proof?: Proof): RegionGraph {
     if (!this._regionGraph) {
       this._regionGraph = this.buildRegionGraph();
+    }
+    if (proof) {
+      this.connectionProofs.forEach(p => proof.add(p));
+      this.disconnectionProofs.forEach(p => proof.add(p));
     }
     return this._regionGraph;
   }
@@ -136,7 +147,7 @@ export class Region {
   private buildRegionGraph(): RegionGraph {
     const grid = this.context.grid;
     const graph = new RegionGraph(grid);
-    const regionMap = this.regionMap;
+    const regionMap = this.getRegionMap();
     const visited = array(grid.width, grid.height, () => false);
     for (let y = 0; y < regionMap.length; y++) {
       for (let x = 0; x < regionMap[y].length; x++) {
@@ -219,6 +230,16 @@ export default class RegionStore extends InsightStore {
     if (!area) return null;
     const rep = this.disjointSet.find(area.id);
     return this._regions.get(rep) ?? null;
+  }
+
+  public getByColor(color: Color): Region[] {
+    const regions: Region[] = [];
+    for (const region of this._regions.values()) {
+      if (region.color === color) {
+        regions.push(region);
+      }
+    }
+    return regions;
   }
 
   /**
@@ -380,7 +401,7 @@ export default class RegionStore extends InsightStore {
       regionA.color !== regionB.color
     ) {
       throw this.error(
-        `Cannot connect ${region(cellA)} and ${region(cellB)}: they are different colors.`
+        `Cannot connect ${area(cellA)} and ${area(cellB)}: they are different colors.`
       );
     }
 
@@ -388,7 +409,7 @@ export default class RegionStore extends InsightStore {
     const disconnected = this.disconnectionProofs.get(regionKey);
     if (disconnected || this.physicalDisconnections.has(regionKey)) {
       throw this.error(
-        `Cannot connect ${region(cellA)} and ${region(cellB)}: they are already known to be disconnected.`
+        `Cannot connect ${area(cellA)} and ${area(cellB)}: they are already known to be disconnected.`
       );
     }
 
@@ -404,9 +425,9 @@ export default class RegionStore extends InsightStore {
     this.disjointSet.union(regionRepA, regionRepB);
     const newRep = this.disjointSet.find(regionRepA);
     const newRegion = Region.merge(regionA, regionB, newRep, proof);
-    this._regions.set(newRep, newRegion);
     this._regions.delete(regionRepA);
     this._regions.delete(regionRepB);
+    this._regions.set(newRep, newRegion);
     return true;
   }
 
@@ -440,7 +461,7 @@ export default class RegionStore extends InsightStore {
 
     if (regionRepA === regionRepB) {
       throw this.error(
-        `Cannot disconnect ${region(cellA)} and ${region(cellB)}: they are already known to be connected.`
+        `Cannot disconnect ${area(cellA)} and ${area(cellB)}: they are already known to be connected.`
       );
     }
 
@@ -462,6 +483,8 @@ export default class RegionStore extends InsightStore {
     }
 
     this.disconnectionProofs.set(regionKey, proof);
+    regionA.disconnectionProofs.add(proof);
+    regionB.disconnectionProofs.add(proof);
     return true;
   }
 
@@ -502,9 +525,14 @@ export default class RegionStore extends InsightStore {
       const [rawA] = this.fromAreaPair(key);
       const repA = this.disjointSet.find(rawA);
       const region = this._regions.get(repA);
-      if (region) {
-        region.connectionProofs.add(proof);
-      }
+      region?.connectionProofs.add(proof);
+    }
+    for (const [key, proof] of this.disconnectionProofs.entries()) {
+      const [repA, repB] = this.fromRegionPair(key);
+      const regionA = this._regions.get(repA);
+      const regionB = this._regions.get(repB);
+      regionA!.connectionProofs.add(proof);
+      regionB!.connectionProofs.add(proof);
     }
 
     this.physicalDisconnections = this.buildPhysicalDisconnections();

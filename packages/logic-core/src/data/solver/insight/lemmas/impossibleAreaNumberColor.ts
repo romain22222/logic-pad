@@ -15,7 +15,7 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const numberStore = context.numberSymbols;
+    const numberSymbols = context.numberSymbols;
     let progress = false;
     for (const [idx, symbol] of context.grid.symbols
       .get(areaNumberInstance.id)
@@ -26,7 +26,7 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
       };
       const originTile = context.grid.getTile(position.x, position.y);
       if (!originTile.exists || originTile.color !== Color.Gray) continue;
-      const tag = numberStore.getTag(areaNumberInstance.id, idx);
+      const tag = numberSymbols.getTag(areaNumberInstance.id, idx);
       for (const color of COLORS) {
         const hypothetical = context.copy();
         hypothetical.setTiles(
@@ -46,10 +46,10 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
         );
 
         const proof = this.proof().difficulty(2);
-        const regionMap = hypothetical.regions.getRegionMap(
-          position,
-          proof
-        ).cells;
+        const regionMap = hypothetical.regions
+          .get(position)
+          ?.getRegionMap(proof);
+        if (!regionMap) continue;
         const flatMap = regionMap.flat();
         const maxComplete = flatMap.reduce(
           (count, cell) => count + (cell || cell === null ? 1 : 0),
@@ -59,7 +59,7 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
           (count, cell) => count + (cell ? 1 : 0),
           0
         );
-        const minPossible = numberStore.minPossible(tag, proof);
+        const minPossible = numberSymbols.minPossible(tag, proof);
         const fillOpposite = () => {
           return modifyTiles(
             context.grid,
@@ -88,7 +88,7 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
           progress = true;
           break;
         }
-        const maxPossible = numberStore.maxPossible(tag, proof);
+        const maxPossible = numberSymbols.maxPossible(tag, proof);
         if (maxPossible < minComplete) {
           context.setTiles(
             fillOpposite(),

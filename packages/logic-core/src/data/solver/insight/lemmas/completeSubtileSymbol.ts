@@ -5,7 +5,7 @@ import { instance as areaNumberInstance } from '../../../symbols/areaNumberSymbo
 import { instance as everyLetterInstance } from '../../../symbols/everyLetterSymbol.js';
 import { instance as houseInstance } from '../../../symbols/houseSymbol.js';
 import { instance as letterInstance } from '../../../symbols/letterSymbol.js';
-import { modifyTiles } from '../helper.js';
+import { modifyTiles, setColor } from '../helper.js';
 import { Color } from '../../../primitives.js';
 
 const SUBTILE_SYMBOLS = [
@@ -58,22 +58,14 @@ export default class CompleteSubtileSymbol extends InsightLemma {
         }
         const color = colors.find(color => color !== Color.Gray)!;
         let changed = false;
-        const newTiles = modifyTiles(
-          context.grid,
-          (x, y, { get, setColor }) => {
-            const tile = get(x, y);
-            if (
-              tile.exists &&
-              !tile.fixed &&
-              tile.color === Color.Gray &&
-              subtilePositions.some(pos => pos.x === x && pos.y === y)
-            ) {
-              setColor(x, y, color);
-              changed = true;
-            }
-            return tile;
+        const newTiles = modifyTiles(context.grid);
+        subtilePositions.forEach(pos => {
+          const tile = context.grid.getTile(pos.x, pos.y);
+          if (tile.exists && !tile.fixed && tile.color === Color.Gray) {
+            setColor(context.grid, newTiles, pos.x, pos.y, color);
+            changed = true;
           }
-        );
+        });
         if (changed) {
           context.setTiles(
             newTiles,

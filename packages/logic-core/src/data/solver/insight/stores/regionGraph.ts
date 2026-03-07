@@ -85,7 +85,7 @@ export class RegionGraph {
    * Find the shortest path between two nodes using the A* algorithm. The heuristic used is the Manhattan distance
    * between the positions of the nodes.
    */
-  public shortestPath(id1: NodeId, id2: NodeId): number[] {
+  public shortestPath(id1: NodeId, id2: NodeId): NodeId[] {
     const key = this.toNodePair(id1, id2);
     if (this._shortestPaths.has(key)) {
       return this._shortestPaths.get(key)!;
@@ -159,7 +159,7 @@ export class RegionGraph {
         const parentNode = parent.get(u);
 
         if (parentNode == null) {
-          if (parentNode === null && (childrenCount.get(u) ?? 0) > 1) {
+          if ((childrenCount.get(u) ?? 0) > 1) {
             articulationPoints.add(u);
           }
           continue;
@@ -169,7 +169,11 @@ export class RegionGraph {
           parentNode,
           Math.min(lowTime.get(parentNode)!, lowTime.get(u)!)
         );
-        if (lowTime.get(u)! >= discoveryTime.get(parentNode)!) {
+        // Non-root articulation condition: root is handled separately by children count.
+        if (
+          parent.get(parentNode) !== null &&
+          lowTime.get(u)! >= discoveryTime.get(parentNode)!
+        ) {
           articulationPoints.add(parentNode);
         }
       }

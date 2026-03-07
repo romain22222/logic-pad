@@ -1,7 +1,6 @@
-import { array } from '../../../dataHelper.js';
 import GridData from '../../../grid.js';
 import { Color, Position } from '../../../primitives.js';
-import { cell, modifyTiles, region } from '../helper.js';
+import { cell, modifyTiles, area, setOneColor } from '../helper.js';
 import InsightContext from '../insightContext.js';
 import InsightLemma from './insightLemma.js';
 
@@ -13,37 +12,21 @@ export default class ConnectThroughBottleneck extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const regionStore = context.regions;
+    const regions = context.regions;
     let progress = false;
-    const visited = array(context.grid.width, context.grid.height, () => false);
-    while (true) {
-      const seed = context.grid.find(
-        (t, x, y) => !visited[y][x] && t.exists && t.color !== Color.Gray
-      );
-      if (!seed) break;
+    for (const regionInfo of regions.regions.values()) {
+      if (regionInfo.color === Color.Gray) continue;
+      if (regionInfo.connectedAreas.size <= 1) continue;
 
-      // Find a region with disconnected areas
       const proof = this.proof().difficulty(3);
-      const regionMap = regionStore.getRegionMap(seed, proof);
-      const color = context.grid.getTile(seed.x, seed.y).color;
-      regionMap.cells.forEach((row, y) =>
-        row.forEach((cell, x) => {
-          if (cell !== false) visited[y][x] = true;
-        })
-      );
-      if (regionMap.islands.length <= 1) continue;
-
-      // Compute shortest paths between the islands and compare them to the articulation points in the graph.
-      // Haven't proven this rigorously, but I think chokepoints between two islands correspond to the intersection
-      // of the shortest paths between the islands and the articulation points in the graph.
-      const graph = regionStore.getGraph(seed, proof);
-      const island1 = regionMap.islands[0];
-      for (let i = 1; i < regionMap.islands.length; i++) {
-        const island2 = regionMap.islands[i];
-        const path = graph.shortestPath(
-          graph.getId(island1.x, island1.y),
-          graph.getId(island2.x, island2.y)
-        );
+      const graph = regionInfo.getRegionGraph(proof);
+      const areas = [...regionInfo.connectedAreas];
+      const area1 = regions.toPosition(areas[0]);
+      const node1 = graph.getId(area1.x, area1.y);
+      for (let i = 1; i < areas.length; i++) {
+        const area2 = regions.toPosition(areas[i]);
+        const node2 = graph.getId(area2.x, area2.y);
+        const path = graph.shortestPath(node1, node2);
         const chokepoints: Position[] = [];
         for (const id of path) {
           if (graph.articulationPoints.has(id)) {
@@ -52,26 +35,21 @@ export default class ConnectThroughBottleneck extends InsightLemma {
         }
         if (chokepoints.length === 0) continue;
         const modified: Position[] = [];
-        const newTiles = modifyTiles(
-          context.grid,
-          (x, y, { get, setOneColor }) => {
-            const tile = get(x, y);
-            if (tile.exists && !tile.fixed && tile.color === Color.Gray) {
-              const position = chokepoints.find(p => p.x === x && p.y === y);
-              if (position) {
-                setOneColor(x, y, color);
-                modified.push(position);
-              }
-            }
+        const newTiles = modifyTiles(context.grid);
+        for (const pos of chokepoints) {
+          const tile = context.grid.getTile(pos.x, pos.y);
+          if (tile.exists && !tile.fixed && tile.color === Color.Gray) {
+            setOneColor(newTiles, pos.x, pos.y, regionInfo.color);
+            modified.push(pos);
           }
-        );
+        }
         if (modified.length === 0) continue;
         context.setTiles(
           newTiles,
           proof
             .copy()
             .describe(
-              `Cells at ${cell(modified)} are bottlenecks connecting ${region(regionMap.islands)}, so they must be filled in`
+              `Cells at ${cell(modified)} are bottlenecks connecting ${area([area1, area2])}, so they must be filled in`
             )
         );
         progress = true;

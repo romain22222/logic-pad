@@ -4,8 +4,6 @@ import ConnectAllRule, {
   instance as connectAllInstance,
 } from '../../../rules/connectAllRule.js';
 import InsightContext from '../insightContext.js';
-import { array } from '../../../dataHelper.js';
-import { Position } from '../../../primitives.js';
 
 export default class ConnectAllCells extends InsightLemma {
   public readonly id = 'connect-all-cells';
@@ -19,41 +17,23 @@ export default class ConnectAllCells extends InsightLemma {
       (rule): rule is ConnectAllRule => rule.id === connectAllInstance.id
     );
     let progress = false;
-    const visited = array(
-      context.grid.width,
-      context.grid.height,
-      (i, j) => !context.grid.getTile(i, j).exists
-    );
     for (const rule of rules) {
       const color = rule.color;
-      const islands: Position[][] = [];
-      while (true) {
-        const seed = context.grid.find(
-          (tile, x, y) => !visited[y][x] && tile.color === color
-        );
-        if (!seed) break;
-        const positions: Position[] = [];
-        context.grid.iterateArea(
-          seed,
-          tile => tile.color === color,
-          (_, x, y) => {
-            positions.push({ x, y });
-          },
-          visited
-        );
-        islands.push(positions);
-      }
-      if (islands.length <= 1) continue;
+      const regions = context.regions.getByColor(color);
+      if (regions.length < 2) continue;
       const proof = this.proof()
         .difficulty(2)
         .describe(`Connect all ${color} cells`);
-      for (let i = 1; i < islands.length; i++) {
-        const changed = context.regions.addConnected(
-          islands[0][0],
-          islands[i][0],
-          proof
-        );
-        progress ||= changed;
+      for (const [i, region] of regions.entries()) {
+        for (let j = i + 1; j < regions.length; j++) {
+          const otherRegion = regions[j];
+          const changed = context.regions.addConnected(
+            region.positions[0],
+            otherRegion.positions[0],
+            proof
+          );
+          progress ||= changed;
+        }
       }
     }
     return progress;

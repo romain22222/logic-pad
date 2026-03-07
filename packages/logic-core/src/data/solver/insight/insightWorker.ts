@@ -48,10 +48,6 @@ onmessage = e => {
   if (initialValidation.final === State.Satisfied) {
     postMessage({
       type: 'solve',
-      data: Serializer.stringifyGrid(context.grid),
-    } satisfies Response);
-    postMessage({
-      type: 'solve',
       data: undefined,
     } satisfies Response);
     return;
