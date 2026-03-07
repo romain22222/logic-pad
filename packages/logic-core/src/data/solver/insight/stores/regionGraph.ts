@@ -212,7 +212,8 @@ export class RegionGraph {
 
       openSet.delete(current!);
       for (const neighbor of this.adjacency.get(current!)!) {
-        const tentativeGScore = (gScore.get(current!) ?? Infinity) + 1; // todo: edge weights
+        const tentativeGScore =
+          (gScore.get(current!) ?? Infinity) + this.nodeWeight(neighbor);
         if (tentativeGScore < (gScore.get(neighbor) ?? Infinity)) {
           cameFrom.set(neighbor, current!);
           gScore.set(neighbor, tentativeGScore);
@@ -230,14 +231,16 @@ export class RegionGraph {
     return []; // No path found
   }
 
+  private nodeWeight(id: NodeId): number {
+    return this.idToPositions.get(id)?.length ?? 1;
+  }
+
   private heuristic(id1: NodeId, id2: NodeId): number {
     const positions1 = this.idToPositions.get(id1)!;
     const positions2 = this.idToPositions.get(id2)!;
     const pos1 = this.toPosition(positions1[0]);
     const pos2 = this.toPosition(positions2[0]);
-    const manhattan = Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
-    // Ensure heuristic is admissible for merged tiles
-    return Math.max(1, manhattan - positions1.length - positions2.length);
+    return Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
   }
 
   public toPositionValue(x: number, y: number): PositionValue {
