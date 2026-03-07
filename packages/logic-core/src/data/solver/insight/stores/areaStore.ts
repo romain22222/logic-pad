@@ -4,9 +4,15 @@ import Symbol from '../../../symbols/symbol.js';
 import InsightContext from '../insightContext.js';
 import InsightStore from './insightStore.js';
 
+declare const positionSymbol: unique symbol;
+declare const areaSymbol: unique symbol;
+
+export type PositionValue = number & { [positionSymbol]: 'position' };
+export type AreaId = PositionValue & { [areaSymbol]: 'area' };
+
 export class Area {
   public constructor(
-    public readonly id: number,
+    public readonly id: AreaId,
     public readonly color: Color,
     public readonly positions: Position[] = [],
     public readonly symbols: Symbol[] = []
@@ -46,7 +52,7 @@ export default class AreaStore extends InsightStore {
     return this._areaList;
   }
 
-  public get(position: Position | number): Area | null {
+  public get(position: Position | PositionValue): Area | null {
     if (typeof position === 'number') {
       const x = position % this.context.grid.width;
       const y = Math.floor(position / this.context.grid.width);
@@ -84,15 +90,17 @@ export default class AreaStore extends InsightStore {
       const seedTile = grid.getTile(seed.x, seed.y);
       if (seedTile.color === Color.Gray) {
         visited[seed.y][seed.x] = true;
-        const area = new Area(this.toCellValue(seed.x, seed.y), Color.Gray, [
-          seed,
-        ]);
+        const area = new Area(
+          this.toPositionValue(seed.x, seed.y) as AreaId,
+          Color.Gray,
+          [seed]
+        );
         newCells[seed.y][seed.x] = area;
         newAreaList.push(area);
         continue;
       } else {
         const area = new Area(
-          this.toCellValue(seed.x, seed.y),
+          this.toPositionValue(seed.x, seed.y) as AreaId,
           seedTile.color,
           [],
           []
@@ -123,7 +131,13 @@ export default class AreaStore extends InsightStore {
     this._areaList = newAreaList;
   }
 
-  private toCellValue(x: number, y: number): number {
-    return y * this.context.grid.width + x;
+  public toPositionValue(x: number, y: number): PositionValue {
+    return (y * this.context.grid.width + x) as PositionValue;
+  }
+
+  public toPosition(positionValue: PositionValue): Position {
+    const x = positionValue % this.context.grid.width;
+    const y = Math.floor(positionValue / this.context.grid.width);
+    return { x, y };
   }
 }

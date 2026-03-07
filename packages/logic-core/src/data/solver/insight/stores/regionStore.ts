@@ -7,17 +7,24 @@ import { cell, region } from '../helper.js';
 import { RegionGraph } from './regionGraph.js';
 import { array } from '../../../dataHelper.js';
 import Symbol from '../../../symbols/symbol.js';
+import { AreaId, PositionValue } from './areaStore.js';
+
+declare const regionSymbol: unique symbol;
+
+export type AreaPair = `${AreaId},${AreaId}`;
+export type RegionId = AreaId & { [regionSymbol]: 'region' };
+export type RegionPair = `${RegionId},${RegionId}`;
 
 export type RegionMap = (boolean | null)[][];
 
 export class Region {
   public constructor(
     protected readonly context: InsightContext,
-    public readonly id: number,
+    public readonly id: RegionId,
     public color: Color,
     public positions: Position[] = [],
     public symbols: Symbol[] = [],
-    public connectedAreas = new Set<number>(),
+    public connectedAreas = new Set<AreaId>(),
     public connectionProofs = new Set<Proof>()
   ) {
     this.context = context;
@@ -32,7 +39,7 @@ export class Region {
   public static merge(
     regionA: Region,
     regionB: Region,
-    id: number,
+    id: RegionId,
     proof?: Proof
   ): Region {
     if (
@@ -175,24 +182,24 @@ export default class RegionStore extends InsightStore {
    * Tracks which **areas** are connected into regions based on logical deductions. Each region is represented by the ID
    * of the representative area in `AreaInfoStore`.
    */
-  private disjointSet = new DisjointSet(0);
+  private disjointSet = new DisjointSet<AreaId, RegionId>(0);
   /**
    * Connections between **areas** represented by area ID pairs.
    * This must not include entries connecting two cells in the same area, aka redundant connections.
    */
-  private connectionProofs = new Map<string, Proof>();
+  private connectionProofs = new Map<AreaPair, Proof>();
   /**
    * Deductions that two **regions** are disconnected, keyed by representative area ID pairs.
    */
-  private disconnectionProofs = new Map<string, Proof>();
+  private disconnectionProofs = new Map<RegionPair, Proof>();
   /**
    * Stores physical disconnections between two **regions**, keyed by representative area ID pairs.
    */
-  private physicalDisconnections = new Set<string>();
+  private physicalDisconnections = new Set<RegionPair>();
   /**
    * Stores all regions.
    */
-  private _regions = new Map<number, Region>();
+  private _regions = new Map<RegionId, Region>();
 
   public readonly id = 'region';
 
@@ -203,11 +210,11 @@ export default class RegionStore extends InsightStore {
     }
   }
 
-  public get regions(): ReadonlyMap<number, Region> {
+  public get regions(): ReadonlyMap<RegionId, Region> {
     return this._regions;
   }
 
-  public get(position: Position | number): Region | null {
+  public get(position: Position | PositionValue): Region | null {
     const area = this.context.areas.get(position);
     if (!area) return null;
     const rep = this.disjointSet.find(area.id);
@@ -247,7 +254,7 @@ export default class RegionStore extends InsightStore {
     )
       return false;
 
-    const key = this.pairKey(repA.id, repB.id);
+    const key = this.toAreaPair(repA.id, repB.id);
     const deduction = this.connectionProofs.get(key);
     if (deduction) {
       proof?.add(deduction);
@@ -293,7 +300,7 @@ export default class RegionStore extends InsightStore {
     const regionRepB = this.disjointSet.find(repB.id);
     if (regionRepA === regionRepB) return false;
 
-    const key = this.pairKey(regionRepA, regionRepB);
+    const key = this.toRegionPair(regionRepA, regionRepB);
     if (this.physicalDisconnections.has(key)) {
       return true;
     }
@@ -312,20 +319,20 @@ export default class RegionStore extends InsightStore {
   public getDisconnectedRegions(
     cell: Position,
     proof?: Proof
-  ): ReadonlySet<number> {
+  ): ReadonlySet<RegionId> {
     const region = this.get(cell);
     if (!region) return new Set();
 
-    const disconnected = new Set<number>();
+    const disconnected = new Set<RegionId>();
     for (const [key, deduction] of this.disconnectionProofs.entries()) {
-      const [rawA, rawB] = this.fromPairKey(key);
+      const [rawA, rawB] = this.fromRegionPair(key);
       if (rawA !== region.id && rawB !== region.id) continue;
       const otherRegionId = rawA === region.id ? rawB : rawA;
       proof?.add(deduction);
       disconnected.add(otherRegionId);
     }
     for (const key of this.physicalDisconnections) {
-      const [rawA, rawB] = this.fromPairKey(key);
+      const [rawA, rawB] = this.fromRegionPair(key);
       if (rawA !== region.id && rawB !== region.id) continue;
       const otherRegionId = rawA === region.id ? rawB : rawA;
       disconnected.add(otherRegionId);
@@ -356,7 +363,7 @@ export default class RegionStore extends InsightStore {
       );
     }
 
-    const areaKey = this.pairKey(repA.id, repB.id);
+    const areaKey = this.toAreaPair(repA.id, repB.id);
     const existing = this.connectionProofs.get(areaKey);
     if (existing) {
       return false;
@@ -377,7 +384,7 @@ export default class RegionStore extends InsightStore {
       );
     }
 
-    const regionKey = this.pairKey(regionRepA, regionRepB);
+    const regionKey = this.toRegionPair(regionRepA, regionRepB);
     const disconnected = this.disconnectionProofs.get(regionKey);
     if (disconnected || this.physicalDisconnections.has(regionKey)) {
       throw this.error(
@@ -448,7 +455,7 @@ export default class RegionStore extends InsightStore {
       return false;
     }
 
-    const regionKey = this.pairKey(regionRepA, regionRepB);
+    const regionKey = this.toRegionPair(regionRepA, regionRepB);
     const disconnected = this.disconnectionProofs.get(regionKey);
     if (disconnected || this.physicalDisconnections.has(regionKey)) {
       return false;
@@ -465,13 +472,13 @@ export default class RegionStore extends InsightStore {
     this._regions.clear();
 
     for (const [key] of this.connectionProofs.entries()) {
-      const [rawA, rawB] = this.fromPairKey(key);
+      const [rawA, rawB] = this.fromAreaPair(key);
       this.disjointSet.union(rawA, rawB);
     }
 
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
-        const area = this.context.areas.get(this.toCellValue(x, y));
+        const area = this.context.areas.get(this.toPositionValue(x, y));
         if (!area) continue;
         const rep = this.disjointSet.find(area.id);
         let region = this._regions.get(rep);
@@ -492,7 +499,7 @@ export default class RegionStore extends InsightStore {
     this.disconnectionProofs = this.rekeyDisconnectionProofs();
 
     for (const [key, proof] of this.connectionProofs.entries()) {
-      const [rawA] = this.fromPairKey(key);
+      const [rawA] = this.fromAreaPair(key);
       const repA = this.disjointSet.find(rawA);
       const region = this._regions.get(repA);
       if (region) {
@@ -503,52 +510,52 @@ export default class RegionStore extends InsightStore {
     this.physicalDisconnections = this.buildPhysicalDisconnections();
   }
 
-  private rekeyConnectionProofs(): Map<string, Proof> {
-    const rekeyedConnectionProofs = new Map<string, Proof>();
+  private rekeyConnectionProofs(): Map<AreaPair, Proof> {
+    const rekeyedConnectionProofs = new Map<AreaPair, Proof>();
     for (const [key, proof] of this.connectionProofs.entries()) {
-      const [rawA, rawB] = this.fromPairKey(key);
+      const [rawA, rawB] = this.fromAreaPair(key);
       const areaA = this.context.areas.get(rawA);
       const areaB = this.context.areas.get(rawB);
       if (!areaA || !areaB) {
         throw this.error(
-          `Invalid connection proof between ${cell(this.fromCellValue(rawA))} and ${cell(
-            this.fromCellValue(rawB)
+          `Invalid connection proof between ${cell(this.toPosition(rawA))} and ${cell(
+            this.toPosition(rawB)
           )}: one or both areas do not exist.`
         );
       }
       if (areaA.id === areaB.id) continue;
-      const regionKey = this.pairKey(areaA.id, areaB.id);
-      if (!rekeyedConnectionProofs.has(regionKey))
-        rekeyedConnectionProofs.set(regionKey, proof);
+      const areaKey = this.toAreaPair(areaA.id, areaB.id);
+      if (!rekeyedConnectionProofs.has(areaKey))
+        rekeyedConnectionProofs.set(areaKey, proof);
     }
     return rekeyedConnectionProofs;
   }
 
-  private rekeyDisconnectionProofs(): Map<string, Proof> {
-    const rekeyedDisconnectionProofs = new Map<string, Proof>();
+  private rekeyDisconnectionProofs(): Map<RegionPair, Proof> {
+    const rekeyedDisconnectionProofs = new Map<RegionPair, Proof>();
     for (const [key, proof] of this.disconnectionProofs.entries()) {
-      const [rawA, rawB] = this.fromPairKey(key);
+      const [rawA, rawB] = this.fromRegionPair(key);
       const areaA = this.context.areas.get(rawA);
       const areaB = this.context.areas.get(rawB);
       if (!areaA || !areaB) {
         throw this.error(
-          `Invalid disconnection proof between ${cell(this.fromCellValue(rawA))} and ${cell(
-            this.fromCellValue(rawB)
+          `Invalid disconnection proof between ${cell(this.toPosition(rawA))} and ${cell(
+            this.toPosition(rawB)
           )}: one or both areas do not exist.`
         );
       }
       const regionA = this.disjointSet.find(areaA.id);
       const regionB = this.disjointSet.find(areaB.id);
-      const regionKey = this.pairKey(regionA, regionB);
+      const regionKey = this.toRegionPair(regionA, regionB);
       if (!rekeyedDisconnectionProofs.has(regionKey))
         rekeyedDisconnectionProofs.set(regionKey, proof);
     }
     return rekeyedDisconnectionProofs;
   }
 
-  private buildPhysicalDisconnections(): Set<string> {
+  private buildPhysicalDisconnections(): Set<RegionPair> {
     const grid = this.context.grid;
-    const disconnections = new Set<string>();
+    const disconnections = new Set<RegionPair>();
     const regions = Array.from(this._regions.values());
     for (let i = 0; i < regions.length; i++) {
       const region = regions[i];
@@ -567,33 +574,46 @@ export default class RegionStore extends InsightStore {
           continue;
         const pos = other.positions[0];
         if (visited[pos.y][pos.x]) continue;
-        const key = this.pairKey(region.id, other.id);
+        const key = this.toRegionPair(region.id, other.id);
         disconnections.add(key);
       }
     }
     return disconnections;
   }
 
-  private toCellValue(x: number, y: number): number {
-    return y * this.context.grid.width + x;
+  public toPositionValue(x: number, y: number): PositionValue {
+    return (y * this.context.grid.width + x) as PositionValue;
   }
 
-  private fromCellValue(value: number): Position {
-    const x = value % this.context.grid.width;
-    const y = Math.floor(value / this.context.grid.width);
+  public toPosition(positionValue: PositionValue): Position {
+    const x = positionValue % this.context.grid.width;
+    const y = Math.floor(positionValue / this.context.grid.width);
     return { x, y };
   }
 
-  private pairKey(valueA: number, valueB: number): string {
+  public toAreaPair(valueA: AreaId, valueB: AreaId): AreaPair {
     if (valueA < valueB) return `${valueA},${valueB}`;
     return `${valueB},${valueA}`;
   }
 
-  private fromPairKey(key: string): [number, number] {
+  public fromAreaPair(key: AreaPair): [AreaId, AreaId] {
     const [rawA, rawB] = key.split(',').map(value => Number.parseInt(value));
     if (!Number.isFinite(rawA) || !Number.isFinite(rawB)) {
       throw this.error('Invalid pair key: ' + key);
     }
-    return [rawA, rawB];
+    return [rawA as AreaId, rawB as AreaId];
+  }
+
+  public toRegionPair(valueA: RegionId, valueB: RegionId): RegionPair {
+    if (valueA < valueB) return `${valueA},${valueB}`;
+    return `${valueB},${valueA}`;
+  }
+
+  public fromRegionPair(key: RegionPair): [RegionId, RegionId] {
+    const [rawA, rawB] = key.split(',').map(value => Number.parseInt(value));
+    if (!Number.isFinite(rawA) || !Number.isFinite(rawB)) {
+      throw this.error('Invalid pair key: ' + key);
+    }
+    return [rawA as RegionId, rawB as RegionId];
   }
 }

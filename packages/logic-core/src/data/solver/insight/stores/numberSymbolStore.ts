@@ -6,6 +6,10 @@ import Proof from '../types/proof.js';
 import InsightStore from './insightStore.js';
 import type InsightContext from '../insightContext.js';
 
+declare const numberSymbol: unique symbol;
+
+export type SymbolTag = string & { [numberSymbol]: 'tag' };
+
 export interface NumberSymbolData {
   possibilities: number[];
   readonly deductions: Map<number, Proof>;
@@ -15,7 +19,7 @@ export interface NumberSymbolData {
  * Tracks true-number possibilities for number symbols.
  */
 export default class NumberSymbolStore extends InsightStore {
-  private symbols = new Map<string, NumberSymbolData>();
+  private symbols = new Map<SymbolTag, NumberSymbolData>();
   private offByX: OffByXRule | undefined;
 
   public readonly id = 'number-symbol';
@@ -78,14 +82,7 @@ export default class NumberSymbolStore extends InsightStore {
     return copy;
   }
 
-  /**
-   * Creates the canonical symbol tag "id,index".
-   */
-  public getTag(id: string, index: number): string {
-    return `${id},${index}`;
-  }
-
-  public getPossibilities(tag: string): number[] {
+  public getPossibilities(tag: SymbolTag): number[] {
     const data = this.symbols.get(tag);
     if (!data) {
       throw this.error('Symbol not found: ' + tag);
@@ -96,7 +93,7 @@ export default class NumberSymbolStore extends InsightStore {
   /**
    * Returns minimum possible true value and contributes supporting proof.
    */
-  public minPossible(tag: string, proof?: Proof): number {
+  public minPossible(tag: SymbolTag, proof?: Proof): number {
     const data = this.symbols.get(tag);
     if (!data) {
       throw this.error('Symbol not found: ' + tag);
@@ -118,7 +115,7 @@ export default class NumberSymbolStore extends InsightStore {
   /**
    * Returns maximum possible true value and contributes supporting proof.
    */
-  public maxPossible(tag: string, proof?: Proof): number {
+  public maxPossible(tag: SymbolTag, proof?: Proof): number {
     const data = this.symbols.get(tag);
     if (!data) {
       throw this.error('Symbol not found: ' + tag);
@@ -141,7 +138,7 @@ export default class NumberSymbolStore extends InsightStore {
    * Eliminates one possible true value for a symbol. Returns true if the possibility was successfully eliminated.
    */
   public eliminatePossibility(
-    tag: string,
+    tag: SymbolTag,
     possibility: number,
     deduction: Proof
   ): boolean {
@@ -155,5 +152,12 @@ export default class NumberSymbolStore extends InsightStore {
     );
     data.deductions.set(possibility, deduction);
     return true;
+  }
+
+  /**
+   * Creates the canonical symbol tag "id,index".
+   */
+  public getTag(id: string, index: number): SymbolTag {
+    return `${id},${index}` as SymbolTag;
   }
 }

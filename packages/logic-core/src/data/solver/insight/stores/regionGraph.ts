@@ -1,30 +1,36 @@
 import GridData from '../../../grid.js';
 import { Position } from '../../../primitives.js';
 import InsightError from '../types/insightError.js';
+import { PositionValue } from './areaStore.js';
+
+declare const graphSymbol: unique symbol;
+
+export type NodeId = number & { [graphSymbol]: 'node' };
+export type NodePair = `${NodeId},${NodeId}`;
 
 export class RegionGraph {
   /**
    * Each node gets an auto-incremented id. This map stores the grid positions corresponding to each node id.
    * There can be multiple positions associated with one node because of merged tiles.
    */
-  public idToPositions = new Map<number, number[]>();
+  public idToPositions = new Map<NodeId, PositionValue[]>();
   /**
    * Each node gets an auto-incremented id. This map stores the node id corresponding to each grid position.
    */
-  public positionToId = new Map<number, number>();
+  public positionToId = new Map<PositionValue, NodeId>();
   /**
    * Adjacency list representing the graph structure. Each node id maps to a set of adjacent node ids.
    */
-  public adjacency = new Map<number, Set<number>>();
+  public adjacency = new Map<NodeId, Set<NodeId>>();
 
-  private _articulationPoints?: Set<number>;
-  private _shortestPaths = new Map<string, number[]>();
+  private _articulationPoints?: Set<NodeId>;
+  private _shortestPaths = new Map<NodePair, NodeId[]>();
 
   /**
    * Articulation points are nodes that, if removed, would increase the number of connected components in the graph.
    * In the context of the puzzle, these represent chokepoints between different regions where connections must pass through.
    */
-  public get articulationPoints(): Set<number> {
+  public get articulationPoints(): Set<NodeId> {
     this._articulationPoints ??= this.tarjanAlgorithm();
     return this._articulationPoints;
   }
@@ -33,22 +39,22 @@ export class RegionGraph {
     this.grid = grid;
   }
 
-  public createNode(): number {
-    const id = this.idToPositions.size;
+  public createNode(): NodeId {
+    const id = this.idToPositions.size as NodeId;
     this.idToPositions.set(id, []);
-    this.adjacency.set(id, new Set<number>());
+    this.adjacency.set(id, new Set<NodeId>());
     this._articulationPoints = undefined;
     return id;
   }
 
-  public addToNode(id: number, x: number, y: number): void {
-    const positionValue = this.fromPosition(x, y);
+  public addToNode(id: NodeId, x: number, y: number): void {
+    const positionValue = this.toPositionValue(x, y);
     this.positionToId.set(positionValue, id);
     this.idToPositions.get(id)!.push(positionValue);
   }
 
-  public getId(x: number, y: number): number {
-    const id = this.positionToId.get(this.fromPosition(x, y));
+  public getId(x: number, y: number): NodeId {
+    const id = this.positionToId.get(this.toPositionValue(x, y));
     if (id === undefined) {
       throw new InsightError(
         'graph',
@@ -58,7 +64,7 @@ export class RegionGraph {
     return id;
   }
 
-  public getPositions(id: number): Position[] {
+  public getPositions(id: NodeId): Position[] {
     const positionValues = this.idToPositions.get(id);
     if (!positionValues) {
       throw new InsightError('graph', `Cannot find id ${id} in the graph`);
@@ -79,8 +85,8 @@ export class RegionGraph {
    * Find the shortest path between two nodes using the A* algorithm. The heuristic used is the Manhattan distance
    * between the positions of the nodes.
    */
-  public shortestPath(id1: number, id2: number): number[] {
-    const key = id1 < id2 ? `${id1},${id2}` : `${id2},${id1}`;
+  public shortestPath(id1: NodeId, id2: NodeId): number[] {
+    const key = this.toNodePair(id1, id2);
     if (this._shortestPaths.has(key)) {
       return this._shortestPaths.get(key)!;
     }
@@ -89,24 +95,13 @@ export class RegionGraph {
     return path;
   }
 
-  private fromPosition(x: number, y: number): number {
-    return y * this.grid.width + x;
-  }
-
-  private toPosition(value: number): Position {
-    return {
-      x: value % this.grid.width,
-      y: Math.floor(value / this.grid.width),
-    };
-  }
-
-  private tarjanAlgorithm(): Set<number> {
-    const visited = new Set<number>();
-    const discoveryTime = new Map<number, number>();
-    const lowTime = new Map<number, number>();
-    const parent = new Map<number, number | null>();
-    const childrenCount = new Map<number, number>();
-    const articulationPoints = new Set<number>();
+  private tarjanAlgorithm(): Set<NodeId> {
+    const visited = new Set<NodeId>();
+    const discoveryTime = new Map<NodeId, number>();
+    const lowTime = new Map<NodeId, number>();
+    const parent = new Map<NodeId, NodeId | null>();
+    const childrenCount = new Map<NodeId, number>();
+    const articulationPoints = new Set<NodeId>();
     let time = 0;
 
     for (const id of this.idToPositions.keys()) {
@@ -120,8 +115,8 @@ export class RegionGraph {
       time += 1;
 
       const stack: Array<{
-        node: number;
-        neighbors: number[];
+        node: NodeId;
+        neighbors: NodeId[];
         nextNeighborIndex: number;
       }> = [
         {
@@ -183,16 +178,16 @@ export class RegionGraph {
     return articulationPoints;
   }
 
-  private aStar(start: number, goal: number): number[] {
-    const openSet = new Set<number>([start]);
-    const cameFrom = new Map<number, number>();
-    const gScore = new Map<number, number>([[start, 0]]);
-    const fScore = new Map<number, number>([
+  private aStar(start: NodeId, goal: NodeId): NodeId[] {
+    const openSet = new Set<NodeId>([start]);
+    const cameFrom = new Map<NodeId, NodeId>();
+    const gScore = new Map<NodeId, number>([[start, 0]]);
+    const fScore = new Map<NodeId, number>([
       [start, this.heuristic(start, goal)],
     ]);
 
     while (openSet.size > 0) {
-      let current: number | null = null;
+      let current: NodeId | null = null;
       let lowestFScore = Infinity;
       for (const node of openSet) {
         const score = fScore.get(node) ?? Infinity;
@@ -203,7 +198,7 @@ export class RegionGraph {
       }
 
       if (current === goal) {
-        const path: number[] = [];
+        const path: NodeId[] = [];
         while (current !== undefined) {
           path.unshift(current);
           current = cameFrom.get(current)!;
@@ -231,7 +226,7 @@ export class RegionGraph {
     return []; // No path found
   }
 
-  private heuristic(id1: number, id2: number): number {
+  private heuristic(id1: NodeId, id2: NodeId): number {
     const positions1 = this.idToPositions.get(id1)!;
     const positions2 = this.idToPositions.get(id2)!;
     const pos1 = this.toPosition(positions1[0]);
@@ -239,5 +234,20 @@ export class RegionGraph {
     const manhattan = Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
     // Ensure heuristic is admissible for merged tiles
     return Math.max(1, manhattan - positions1.length - positions2.length);
+  }
+
+  public toPositionValue(x: number, y: number): PositionValue {
+    return (y * this.grid.width + x) as PositionValue;
+  }
+
+  public toPosition(positionValue: PositionValue): Position {
+    const x = positionValue % this.grid.width;
+    const y = Math.floor(positionValue / this.grid.width);
+    return { x, y };
+  }
+
+  public toNodePair(valueA: NodeId, valueB: NodeId): NodePair {
+    if (valueA < valueB) return `${valueA},${valueB}`;
+    return `${valueB},${valueA}`;
   }
 }
