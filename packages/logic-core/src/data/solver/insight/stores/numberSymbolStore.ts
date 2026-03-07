@@ -18,7 +18,7 @@ export default class NumberSymbolStore extends InsightStore {
   private symbols = new Map<string, NumberSymbolData>();
   private offByX: OffByXRule | undefined;
 
-  public readonly id = 'numberSymbolStore';
+  public readonly id = 'number-symbol';
 
   public constructor(context: InsightContext, initialize = true) {
     super(context);

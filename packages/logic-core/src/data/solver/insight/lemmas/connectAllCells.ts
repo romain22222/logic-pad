@@ -48,7 +48,7 @@ export default class ConnectAllCells extends InsightLemma {
         .difficulty(2)
         .describe(`Connect all ${color} cells`);
       for (let i = 1; i < islands.length; i++) {
-        const changed = context.regionStore.addConnected(
+        const changed = context.regions.addConnected(
           islands[0][0],
           islands[i][0],
           proof

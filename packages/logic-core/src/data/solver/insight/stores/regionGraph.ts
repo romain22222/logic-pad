@@ -2,7 +2,7 @@ import GridData from '../../../grid.js';
 import { Position } from '../../../primitives.js';
 import InsightError from '../types/insightError.js';
 
-export class Graph {
+export class RegionGraph {
   /**
    * Each node gets an auto-incremented id. This map stores the grid positions corresponding to each node id.
    * There can be multiple positions associated with one node because of merged tiles.
@@ -29,7 +29,7 @@ export class Graph {
     return this._articulationPoints;
   }
 
-  public constructor(protected grid: GridData) {
+  public constructor(protected readonly grid: GridData) {
     this.grid = grid;
   }
 
@@ -213,7 +213,7 @@ export class Graph {
 
       openSet.delete(current!);
       for (const neighbor of this.adjacency.get(current!)!) {
-        const tentativeGScore = (gScore.get(current!) ?? Infinity) + 1; // Assuming uniform cost
+        const tentativeGScore = (gScore.get(current!) ?? Infinity) + 1; // todo: edge weights
         if (tentativeGScore < (gScore.get(neighbor) ?? Infinity)) {
           cameFrom.set(neighbor, current!);
           gScore.set(neighbor, tentativeGScore);

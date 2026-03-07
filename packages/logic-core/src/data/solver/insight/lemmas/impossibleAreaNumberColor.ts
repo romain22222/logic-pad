@@ -15,7 +15,7 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const numberStore = context.numberSymbolStore;
+    const numberStore = context.numberSymbols;
     let progress = false;
     for (const [idx, symbol] of context.grid.symbols
       .get(areaNumberInstance.id)
@@ -46,7 +46,7 @@ export default class ImpossibleAreaNumberColor extends InsightLemma {
         );
 
         const proof = this.proof().difficulty(2);
-        const regionMap = hypothetical.regionStore.getRegionMap(
+        const regionMap = hypothetical.regions.getRegionMap(
           position,
           proof
         ).cells;

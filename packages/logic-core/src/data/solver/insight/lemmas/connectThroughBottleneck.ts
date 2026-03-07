@@ -13,7 +13,7 @@ export default class ConnectThroughBottleneck extends InsightLemma {
   }
 
   public apply(context: InsightContext): boolean {
-    const regionStore = context.regionStore;
+    const regionStore = context.regions;
     let progress = false;
     const visited = array(context.grid.width, context.grid.height, () => false);
     while (true) {
