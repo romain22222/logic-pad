@@ -89,13 +89,17 @@ export default class AreaStore extends InsightStore {
       if (!seed) break;
       const seedTile = grid.getTile(seed.x, seed.y);
       if (seedTile.color === Color.Gray) {
-        visited[seed.y][seed.x] = true;
         const area = new Area(
           this.toPositionValue(seed.x, seed.y) as AreaId,
           Color.Gray,
           [seed]
         );
-        newCells[seed.y][seed.x] = area;
+        const positions = grid.connections.getConnectedTiles(seed);
+        for (const pos of positions) {
+          visited[pos.y][pos.x] = true;
+          area.positions.push({ x: pos.x, y: pos.y });
+          newCells[pos.y][pos.x] = area;
+        }
         newAreaList.push(area);
         continue;
       } else {
